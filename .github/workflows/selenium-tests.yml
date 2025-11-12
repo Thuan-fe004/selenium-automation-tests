@@ -1,0 +1,138 @@
+name: Selenium Automation Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Chạy tự động mỗi ngày lúc 9:00 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:  # Cho phép chạy thủ công
+
+jobs:
+  selenium-tests:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: 🌐 Setup Chrome Browser
+      uses: browser-actions/setup-chrome@v1
+      with:
+        chrome-version: stable
+    
+    - name: ℹ️ Display Chrome version
+      run: |
+        chrome --version
+        which chrome
+    
+    - name: 📦 Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 📋 Display environment info
+      run: |
+        python --version
+        pip list
+        echo "CI=$CI"
+    
+    - name: 🧪 Run Selenium Tests
+      env:
+        CI: true
+      run: |
+        cd tests
+        python selenium_test_suite.py
+      timeout-minutes: 15
+      continue-on-error: false
+    
+    - name: 📊 Upload Test Results (Excel)
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-python-${{ matrix.python-version }}
+        path: |
+          tests/*.xlsx
+          tests/Selenium_Test_Results.xlsx
+        retention-days: 30
+        if-no-files-found: warn
+    
+    - name: 📸 Upload Screenshots (if any)
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: screenshots-python-${{ matrix.python-version }}
+        path: |
+          tests/screenshots/
+          screenshots/
+        retention-days: 7
+        if-no-files-found: ignore
+    
+    - name: 📝 Generate Test Summary
+      if: always()
+      run: |
+        echo "## 🎯 Selenium Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Python Version | ${{ matrix.python-version }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| OS | ubuntu-latest |" >> $GITHUB_STEP_SUMMARY
+        echo "| Browser | Chrome (Stable) |" >> $GITHUB_STEP_SUMMARY
+        echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "tests/Selenium_Test_Results.xlsx" ]; then
+          echo "✅ Test results file generated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Download artifacts to view detailed test results" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Test results file not found" >> $GITHUB_STEP_SUMMARY
+        fi
+    
+    - name: 🔔 Comment on PR (if PR)
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const status = '${{ job.status }}';
+          const emoji = status === 'success' ? '✅' : '❌';
+          const message = `${emoji} Selenium Tests ${status} for Python ${{ matrix.python-version }}
+          
+          **Details:**
+          - Workflow Run: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+          
+          Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: message
+          });
+
+  # Job tổng hợp kết quả
+  test-summary:
+    needs: selenium-tests
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: 📊 Final Summary
+      run: |
+        echo "## 🎉 All Tests Completed!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Check individual job results above for details." >> $GITHUB_STEP_SUMMARY
