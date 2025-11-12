@@ -61,7 +61,7 @@ jobs:
     
     - name: 📊 Upload Test Results (Excel)
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-python-${{ matrix.python-version }}
         path: |
@@ -72,7 +72,7 @@ jobs:
     
     - name: 📸 Upload Screenshots (if any)
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: screenshots-python-${{ matrix.python-version }}
         path: |
